@@ -18,7 +18,7 @@ def render_model_params_tab():
             "Machine Learning Model",
             options=[
                 "Random Forest",
-                "Gradient Boosting",
+                "Gradient_Boosting",
                 "Logistic Regression",
                 "Neural Network"
             ],
