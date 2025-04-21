@@ -39,7 +39,7 @@ def generate_sample_data():
     
     # Define parameters for data generation
     num_students = 200
-    current_year = 2025
+    current_year = 2022
     
     # Student IDs
     student_ids = [f"STU{i:04d}" for i in range(1, num_students + 1)]
