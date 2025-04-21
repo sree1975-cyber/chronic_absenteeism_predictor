@@ -34,31 +34,28 @@ def display_svg(file_path, width=None):
     return content
 
 def generate_sample_data():
-    """Generate sample data where CA = absent >10% of days."""
-    np.random.seed(42)
+    """Generate sample data for demonstration purposes with realistic patterns"""
+    np.random.seed(42)  # For reproducibility
+    
+    # Define parameters for data generation
     num_students = 200
+    current_year = 2023
+    
+    # Student IDs
+    student_ids = [f"STU{i:04d}" for i in range(1, num_students + 1)]
+    
+    # Schools
+    schools = ["North High", "South High", "East Middle", "West Elementary", "Central Academy"]
+    school_data = np.random.choice(schools, num_students)
+    
+    # Grades
+    grades = np.random.randint(6, 13, num_students)  # Grades 6-12
+    
+    # Gender
+    genders = np.random.choice(["Male", "Female"], num_students)
+    
+    # Attendance data - with realistic patterns
     total_school_days = 180
-
-    # Simulate absences (skewed toward lower values)
-    absence_rates = np.random.beta(1.5, 4, num_students)  # Most students have low absence rates
-    absent_days = (absence_rates * 40).astype(int)  # Max 40 days absent
-    present_days = total_school_days - absent_days
-
-    # Calculate CA_Risk (0-1 scale, where 0.1 = 10% absent)
-    ca_risk = np.clip(absent_days / total_school_days, 0, 1)
-    ca_status = (ca_risk > 0.1).astype(int)  # CA = >10% absent
-
-    # Create DataFrame
-    data = pd.DataFrame({
-        'Student_ID': [f"STU{i:04d}" for i in range(1, num_students + 1)],
-        'Present_Days': present_days,
-        'Absent_Days': absent_days,
-        'Attendance_Percentage': (present_days / total_school_days) * 100,
-        'CA_Risk': ca_risk,
-        'CA_Status': ca_status,
-        # Add other fields (School, Grade, etc.) as needed...
-    })
-    return data
     
     # Create a bias where some students tend to be absent more
     # This creates a more realistic distribution
