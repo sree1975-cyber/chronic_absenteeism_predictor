@@ -114,7 +114,6 @@ def generate_sample_data():
     # Combine data
     combined_data = pd.concat([data, pd.DataFrame(historical_data)]) if historical_data else data
     return data, combined_data
-
 def preprocess_data(df, is_training=True):
     """Preprocess the input data for training or prediction with proper unknown handling"""
     try:
