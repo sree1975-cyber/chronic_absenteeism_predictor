@@ -132,7 +132,7 @@ def generate_sample_data():
     })
     
     # Add a label for CA (defined as missing >10% of school days)
-    data['CA_Status'] = (data['Absent_Days'] / total_school_days > 0.1).astype(int)
+    data['CA_Status'] = (data['Absent_Days'] / total_school_days >=10).astype(int)
     
     # Generate historical data for some students
     historical_years = 3
@@ -183,7 +183,7 @@ def generate_sample_data():
                 student_row['Year'] = year
                 
                 # Determine CA Status
-                student_row['CA_Status'] = 1 if (new_absence / total_school_days > 0.1) else 0
+                student_row['CA_Status'] = 1 if (new_absence / total_school_days >= 10) else 0
                 
                 # Add to historical data
                 historical_data.append(student_row)
