@@ -56,7 +56,7 @@ def render_model_params_tab():
             max_depth = st.slider("Maximum Tree Depth", 2, 10, 3, 1)
             
             model_params = {
-                'gradient_boost': {
+                'gradient_boosting': {
                     'n_estimators': n_estimators,
                     'learning_rate': learning_rate,
                     'max_depth': max_depth,
