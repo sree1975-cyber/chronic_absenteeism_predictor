@@ -50,7 +50,7 @@ def render_model_params_tab():
                 }
             }
         
-        elif model_type_key == "gradient_boosting":
+        elif model_type_key == "gradient_boost":
             n_estimators = st.slider("Number of Boosting Stages", 10, 500, 100, 10)
             learning_rate = st.slider("Learning Rate", 0.01, 0.5, 0.1, 0.01)
             max_depth = st.slider("Maximum Tree Depth", 2, 10, 3, 1)
