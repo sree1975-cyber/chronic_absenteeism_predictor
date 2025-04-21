@@ -34,63 +34,34 @@ def display_svg(file_path, width=None):
     return content
 
 def generate_sample_data():
-    """Generate sample data for demonstration purposes with realistic patterns"""
-    np.random.seed(42)  # For reproducibility
-    
-    # Define parameters for data generation
-    num_students = 200
-    current_year = 2022
-    
-    # Student IDs
+    """Generate sample data with academic year logic (Sep-June)"""
+    np.random.seed(42)
+    num_students = 500  # Increased to 500
+    current_year = 2025  # Represents Sep 2024 - June 2025
+
+    # Student IDs (STU0001 to STU0500)
     student_ids = [f"STU{i:04d}" for i in range(1, num_students + 1)]
     
-    # Schools
+    # Schools, Grades, Gender (unchanged)
     schools = ["North High", "South High", "East Middle", "West Elementary", "Central Academy"]
     school_data = np.random.choice(schools, num_students)
-    
-    # Grades
     grades = np.random.randint(6, 13, num_students)  # Grades 6-12
-    
-    # Gender
     genders = np.random.choice(["Male", "Female"], num_students)
-    
-    # Attendance data - with realistic patterns
+
+    # Attendance logic (180 school days for a full year)
     total_school_days = 180
-    
-    # Create a bias where some students tend to be absent more
-    absence_bias = np.random.beta(1.5, 4, num_students)  # Skewed distribution
-    
-    # Calculate present and absent days
-    absent_days = (absence_bias * 40).astype(int)  # Max ~40 days absent
-    present_days = total_school_days - absent_days
-    
-    # Ensure no negative days
-    present_days = np.maximum(present_days, 0)
-    
-    # Calculate attendance percentages
+    absence_bias = np.random.beta(1.5, 4, num_students)
+    absent_days = (absence_bias * 40).astype(int)  # Max 40 absences
+    present_days = np.maximum(total_school_days - absent_days, 0)
     attendance_pct = (present_days / total_school_days) * 100
-    
-    # Meal codes - higher absence tends to correlate with free/reduced meals
-    meal_code_probs = np.array([
-        [0.2, 0.2, 0.6],  # Low absence: 20% Free, 20% Reduced, 60% Paid
-        [0.5, 0.3, 0.2],  # Medium absence: 50% Free, 30% Reduced, 20% Paid
-        [0.7, 0.2, 0.1]   # High absence: 70% Free, 20% Reduced, 10% Paid
-    ])
-    
-    # Determine which absence category each student falls into
-    absence_categories = np.digitize(absence_bias, [0.2, 0.5])  # Low, Medium, High
-    
-    meal_codes = []
-    for cat in absence_categories:
-        meal_codes.append(np.random.choice(["Free", "Reduced", "Paid"], p=meal_code_probs[cat]))
-    
-    # Academic performance - negatively correlated with absences
-    base_academic = np.random.normal(75, 15, num_students)
-    absence_penalty = absence_bias * 30  # Up to 30 point penalty
-    academic_perf = base_academic - absence_penalty
-    academic_perf = np.clip(academic_perf, 0, 100).astype(int)
-    
-    # Create the dataframe
+
+    # Meal codes, academic performance (unchanged)
+    meal_code_probs = np.array([[0.2, 0.2, 0.6], [0.5, 0.3, 0.2], [0.7, 0.2, 0.1]])
+    absence_categories = np.digitize(absence_bias, [0.2, 0.5])
+    meal_codes = [np.random.choice(["Free", "Reduced", "Paid"], p=meal_code_probs[cat]) for cat in absence_categories]
+    academic_perf = np.clip(np.random.normal(75, 15, num_students) - (absence_bias * 30), 0, 100).astype(int)
+
+    # Current year (2025 = Sep 2024 - June 2025)
     data = pd.DataFrame({
         'Student_ID': student_ids,
         'School': school_data,
@@ -101,51 +72,47 @@ def generate_sample_data():
         'Attendance_Percentage': attendance_pct,
         'Meal_Code': meal_codes,
         'Academic_Performance': academic_perf,
-        'Year': current_year
+        'Year': current_year,
+        'CA_Status': (absent_days / total_school_days >= 0.1).astype(int)
     })
-    
-    # Add CA_Status (1 if absent ≥10% of school days)
-    data['CA_Status'] = (data['Absent_Days'] / total_school_days >= 0.1).astype(int)
-    
-    # Generate historical data for some students
-    historical_years = 3
+
+    # Generate historical data for 2022, 2023, June 2024
+    historical_years = {
+        2022: 500,  # All 500 students
+        2023: 500,  # All 500 students
+        2024: 500   # June 2024 (partial year)
+    }
     historical_data = []
-    
-    for year in range(current_year - historical_years, current_year):
-        # Select 50% of students for historical data
-        selected_students = np.random.choice(num_students, num_students // 2, replace=False)
+
+    for year, num_records in historical_years.items():
+        selected_students = np.random.choice(num_students, num_records, replace=False)
         
         for idx in selected_students:
             student_row = data.iloc[idx].copy()
             year_diff = current_year - year
             student_row['Grade'] = max(6, student_row['Grade'] - year_diff)
-            
+
             if student_row['Grade'] >= 6:
-                # Randomize attendance for past years (with slight fluctuations)
+                # Adjust attendance for partial year (June 2024 = 90 days)
+                days_in_year = 90 if year == 2024 else 180
                 base_absence = student_row['Absent_Days']
-                random_factor = np.random.normal(1, 0.3)
-                new_absence = max(0, int(base_absence * random_factor))
-                new_presence = total_school_days - new_absence
-                
+                new_absence = max(0, int(base_absence * np.random.normal(0.8, 0.2)))
+                new_presence = days_in_year - new_absence
+
                 student_row.update({
-                    'Absent_Days': new_absence,
-                    'Present_Days': new_presence,
-                    'Attendance_Percentage': (new_presence / total_school_days) * 100,
+                    'Present_Days': max(0, new_presence),
+                    'Absent_Days': max(0, new_absence),
+                    'Attendance_Percentage': (new_presence / days_in_year * 100) if days_in_year > 0 else 0,
                     'Academic_Performance': max(0, min(100, int(
                         student_row['Academic_Performance'] + np.random.normal(0, 5)
                     ))),
                     'Year': year,
-                    'CA_Status': 1 if (new_absence / total_school_days >= 0.1) else 0
+                    'CA_Status': 1 if (new_absence / days_in_year >= 0.1) else 0
                 })
                 historical_data.append(student_row)
-    
-    # Combine current + historical data
-    if historical_data:
-        historical_df = pd.DataFrame(historical_data)
-        combined_data = pd.concat([data, historical_df])
-    else:
-        combined_data = data
-    
+
+    # Combine data
+    combined_data = pd.concat([data, pd.DataFrame(historical_data)]) if historical_data else data
     return data, combined_data
 
 def preprocess_data(df, is_training=True):
