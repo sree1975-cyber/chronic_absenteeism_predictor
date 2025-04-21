@@ -39,7 +39,7 @@ def generate_sample_data():
     
     # Define parameters for data generation
     num_students = 200
-    current_year = 2023
+    current_year = 2025
     
     # Student IDs
     student_ids = [f"STU{i:04d}" for i in range(1, num_students + 1)]
@@ -58,7 +58,6 @@ def generate_sample_data():
     total_school_days = 180
     
     # Create a bias where some students tend to be absent more
-    # This creates a more realistic distribution
     absence_bias = np.random.beta(1.5, 4, num_students)  # Skewed distribution
     
     # Calculate present and absent days
@@ -79,42 +78,17 @@ def generate_sample_data():
     ])
     
     # Determine which absence category each student falls into
-    absence_categories = np.digitize(absence_bias, [0.2, 0.5]) # Low, Medium, High
+    absence_categories = np.digitize(absence_bias, [0.2, 0.5])  # Low, Medium, High
     
     meal_codes = []
     for cat in absence_categories:
         meal_codes.append(np.random.choice(["Free", "Reduced", "Paid"], p=meal_code_probs[cat]))
     
     # Academic performance - negatively correlated with absences
-    # Base academic performance
     base_academic = np.random.normal(75, 15, num_students)
-    
-    # Apply a penalty based on absences
     absence_penalty = absence_bias * 30  # Up to 30 point penalty
     academic_perf = base_academic - absence_penalty
-    
-    # Clip to valid range
     academic_perf = np.clip(academic_perf, 0, 100).astype(int)
-    
-    # CA (Chronic Absenteeism) Risk - calculated based on factors
-    # Define weights for risk factors
-    weights = {
-        'attendance': -0.5,        # Higher attendance -> lower risk
-        'meal_code': 0.15,         # Free/Reduced meal -> higher risk
-        'academic': -0.2,          # Higher academic performance -> lower risk
-        'random_factor': 0.15      # Random individual factors
-    }
-    
-    # Calculate risk scores
-    risk_scores = (
-        weights['attendance'] * (attendance_pct / 100) +
-        weights['meal_code'] * np.array([{'Free': 1.0, 'Reduced': 0.5, 'Paid': 0.0}[m] for m in meal_codes]) +
-        weights['academic'] * (academic_perf / 100) +
-        weights['random_factor'] * np.random.random(num_students)
-    )
-    
-    # Normalize to 0-1 range
-    risk_scores = (risk_scores - risk_scores.min()) / (risk_scores.max() - risk_scores.min())
     
     # Create the dataframe
     data = pd.DataFrame({
@@ -127,11 +101,10 @@ def generate_sample_data():
         'Attendance_Percentage': attendance_pct,
         'Meal_Code': meal_codes,
         'Academic_Performance': academic_perf,
-        'CA_Risk': risk_scores,
-        'Year': current_year  # Year as integer instead of full date
+        'Year': current_year
     })
     
-    # Add a label for CA (defined as missing >10% of school days)
+    # Add CA_Status (1 if absent ≥10% of school days)
     data['CA_Status'] = (data['Absent_Days'] / total_school_days >= 0.1).astype(int)
     
     # Generate historical data for some students
@@ -143,63 +116,32 @@ def generate_sample_data():
         selected_students = np.random.choice(num_students, num_students // 2, replace=False)
         
         for idx in selected_students:
-            # Copy the student row
             student_row = data.iloc[idx].copy()
-            
-            # Adjust for historical year
             year_diff = current_year - year
             student_row['Grade'] = max(6, student_row['Grade'] - year_diff)
             
-            # Only include if grade is valid (6 or higher)
             if student_row['Grade'] >= 6:
-                # Randomize attendance data for previous years
-                # but maintain some consistency with their current pattern
+                # Randomize attendance for past years (with slight fluctuations)
                 base_absence = student_row['Absent_Days']
-                random_factor = np.random.normal(1, 0.3)  # Fluctuation factor
+                random_factor = np.random.normal(1, 0.3)
                 new_absence = max(0, int(base_absence * random_factor))
                 new_presence = total_school_days - new_absence
                 
-                student_row['Absent_Days'] = new_absence
-                student_row['Present_Days'] = new_presence
-                student_row['Attendance_Percentage'] = (new_presence / total_school_days) * 100
-                
-                # Adjust academic performance
-                current_academic = student_row['Academic_Performance']
-                student_row['Academic_Performance'] = max(0, min(100, int(current_academic + np.random.normal(0, 5))))
-                
-                # Recalculate CA risk
-                attendance_factor = student_row['Attendance_Percentage'] / 100
-                meal_factor = {'Free': 1.0, 'Reduced': 0.5, 'Paid': 0.0}[student_row['Meal_Code']]
-                academic_factor = student_row['Academic_Performance'] / 100
-                
-                risk = (
-                    weights['attendance'] * attendance_factor +
-                    weights['meal_code'] * meal_factor +
-                    weights['academic'] * academic_factor +
-                    weights['random_factor'] * np.random.random()
-                )
-                
-                # Set the new year
-                student_row['Year'] = year
-                
-                # Determine CA Status
-                student_row['CA_Status'] = 1 if (new_absence / total_school_days >= 0.1) else 0
-                
-                # Add to historical data
+                student_row.update({
+                    'Absent_Days': new_absence,
+                    'Present_Days': new_presence,
+                    'Attendance_Percentage': (new_presence / total_school_days) * 100,
+                    'Academic_Performance': max(0, min(100, int(
+                        student_row['Academic_Performance'] + np.random.normal(0, 5)
+                    ))),
+                    'Year': year,
+                    'CA_Status': 1 if (new_absence / total_school_days >= 0.1) else 0
+                })
                 historical_data.append(student_row)
     
-    # Create historical dataframe and normalize risk scores
+    # Combine current + historical data
     if historical_data:
         historical_df = pd.DataFrame(historical_data)
-        
-        # Normalize risk scores to 0-1 range for the historical data
-        min_risk = min(historical_df['CA_Risk'].min(), data['CA_Risk'].min())
-        max_risk = max(historical_df['CA_Risk'].max(), data['CA_Risk'].max())
-        
-        historical_df['CA_Risk'] = (historical_df['CA_Risk'] - min_risk) / (max_risk - min_risk)
-        data['CA_Risk'] = (data['CA_Risk'] - min_risk) / (max_risk - min_risk)
-        
-        # Combine current and historical data
         combined_data = pd.concat([data, historical_df])
     else:
         combined_data = data
