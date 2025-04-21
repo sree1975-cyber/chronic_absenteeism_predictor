@@ -1,76 +1,9 @@
 """
-Model Training App with Streamlit
-Complete working version with Gradient Boosting support
+Model Parameters tab functionality
 """
 
 import streamlit as st
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-def train_models(data, models_to_train, params):
-    """
-    Train machine learning models and return results
-    Args:
-        data: Pandas DataFrame with features and target
-        models_to_train: List of model types to train (e.g., ['random_forest'])
-        params: Dictionary of model parameters
-    Returns:
-        Dictionary containing trained models and evaluation reports
-    """
-    if data.empty:
-        raise ValueError("No training data provided")
-    
-    # Assume last column is target, others are features
-    X = data.iloc[:, :-1]
-    y = data.iloc[:, -1]
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-    
-    trained_models = {}
-    reports = {}
-    
-    for model_type in models_to_train:
-        try:
-            if model_type == 'random_forest':
-                model = RandomForestClassifier(**params['random_forest'])
-            elif model_type == 'gradient_boosting':
-                model = GradientBoostingClassifier(**params['gradient_boosting'])
-            elif model_type == 'logistic_regression':
-                model = LogisticRegression(**params['logistic_regression'])
-            elif model_type == 'neural_network':
-                model = MLPClassifier(**params['neural_network'])
-            else:
-                raise ValueError(f"Unknown model type: {model_type}")
-            
-            # Train model
-            model.fit(X_train, y_train)
-            
-            # Evaluate
-            y_pred = model.predict(X_test)
-            reports[model_type] = {
-                'accuracy': accuracy_score(y_test, y_pred),
-                'precision': precision_score(y_test, y_pred, average='weighted'),
-                'recall': recall_score(y_test, y_pred, average='weighted'),
-                'f1_score': f1_score(y_test, y_pred, average='weighted')
-            }
-            trained_models[model_type] = model
-            
-        except Exception as e:
-            st.error(f"Error training {model_type}: {str(e)}")
-            continue
-    
-    return {
-        'models': trained_models,
-        'reports': reports,
-        'feature_names': list(X.columns)
-    }
+from utils.common import train_models
 
 def render_model_params_tab():
     """Render the Model Parameters tab content"""
@@ -123,7 +56,7 @@ def render_model_params_tab():
             max_depth = st.slider("Maximum Tree Depth", 2, 10, 3, 1)
             
             model_params = {
-                'gradient_boosting': {
+                'gradient_boost': {
                     'n_estimators': n_estimators,
                     'learning_rate': learning_rate,
                     'max_depth': max_depth,
@@ -176,13 +109,10 @@ def render_model_params_tab():
     
     # Handle training process if button is clicked
     if train_button:
-        # Check if we have training data (replace with your actual data)
-        if 'historical_data' not in st.session_state:
-            # Sample data if none exists (replace with your data loading logic)
-            st.warning("Using sample data - replace with your actual dataset")
-            from sklearn.datasets import make_classification
-            X, y = make_classification(n_samples=1000, n_features=10, random_state=42)
-            st.session_state.historical_data = pd.DataFrame(X).assign(target=y)
+        # Check if we have training data
+        if 'historical_data' not in st.session_state or st.session_state.historical_data.empty:
+            st.error("❌ No training data available. Please upload data in the Training Data tab.")
+            return
         
         # Set training status
         st.session_state.training_status = "in_progress"
@@ -194,7 +124,7 @@ def render_model_params_tab():
         status_text = st.empty()
         status_text.text("Starting training process...")
         
-        # Simulate training progress
+        # Update progress
         import time
         for i in range(101):
             if i < 20:
@@ -251,8 +181,88 @@ def render_model_params_tab():
             
             # Error message
             st.error("❌ Model training failed. Please check your data and parameters.")
-
-# Run the app
-if __name__ == "__main__":
-    st.set_page_config(page_title="Model Trainer", layout="wide")
-    render_model_params_tab()
+    
+    # Show advanced options in an expander
+    with st.expander("Advanced Options"):
+        st.markdown("### Feature Selection")
+        st.markdown("""
+        By default, all available features are used for training. In a future version, 
+        you'll be able to select specific features to include in your model.
+        """)
+        
+        st.markdown("### Hyperparameter Tuning")
+        st.markdown("""
+        For optimal performance, consider using hyperparameter tuning. In a future version, 
+        you'll be able to automatically search for the best parameters for your model.
+        """)
+    
+    # Show model information in an expander
+    with st.expander("Model Information"):
+        st.markdown(f"### {model_type}")
+        
+        if model_type_key == "random_forest":
+            st.markdown("""
+            **Random Forest** is an ensemble learning method that constructs multiple decision trees 
+            during training and outputs the class that is the mode of the classes of the individual trees.
+            
+            *Advantages:*
+            - Performs well on many problems, including complex datasets
+            - Robust to outliers and non-linear data
+            - Provides feature importance metrics
+            
+            *Parameters:*
+            - **Number of Trees**: More trees generally result in better performance but slower training
+            - **Maximum Tree Depth**: Controls the maximum depth of each tree; deeper trees may overfit
+            - **Minimum Samples to Split**: The minimum number of samples required to split a node
+            """)
+        
+        elif model_type_key == "gradient_boosting":
+            st.markdown("""
+            **Gradient Boosting** builds an ensemble of decision trees sequentially, with each new tree 
+            correcting errors made by previously trained trees.
+            
+            *Advantages:*
+            - Often provides higher accuracy than single models
+            - Handles mixed data types well
+            - Robust to outliers and missing data
+            
+            *Parameters:*
+            - **Number of Boosting Stages**: The number of sequential trees to build
+            - **Learning Rate**: Controls how much each tree contributes to the final result
+            - **Maximum Tree Depth**: Controls complexity of the constituent trees
+            """)
+        
+        elif model_type_key == "logistic_regression":
+            st.markdown("""
+            **Logistic Regression** is a linear model that predicts the probability of an observation 
+            belonging to a certain class. It's simple, interpretable, and works well for linearly separable data.
+            
+            *Advantages:*
+            - Simple and interpretable
+            - Works well for linearly separable data
+            - Less prone to overfitting than complex models
+            
+            *Parameters:*
+            - **Regularization Strength (C)**: Inverse of regularization strength; smaller values increase regularization
+            - **Maximum Iterations**: Maximum number of iterations for the solver to converge
+            - **Solver**: Algorithm to use in the optimization problem
+            """)
+        
+        elif model_type_key == "neural_network":
+            st.markdown("""
+            **Neural Network** is a deep learning approach that can model complex relationships between inputs and outputs.
+            We use a Multi-Layer Perceptron (MLP) classifier for this application.
+            
+            *Advantages:*
+            - Can capture complex non-linear patterns
+            - Handles high-dimensional data well
+            - Adaptable to many types of problems
+            
+            *Parameters:*
+            - **Hidden Layer Sizes**: The number of neurons in each hidden layer
+            - **Activation Function**: The function used to transform the output of each neuron
+            - **L2 Regularization**: Penalizes large weights to prevent overfitting
+            - **Maximum Iterations**: Maximum number of iterations for the solver to converge
+            """)
+    
+    return
