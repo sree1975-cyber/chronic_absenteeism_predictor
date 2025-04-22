@@ -690,8 +690,8 @@ def render_advanced_analytics():
     # Temporal Attendance Trends tab
     with analytics_tabs[5]:
         st.markdown("<div class='card-title'>📅 Temporal Attendance Trends</div>", unsafe_allow_html=True)
-    # Add collapsible section for description
-    with st.expander("What are Temporal Attendance Trends?"):
+        # Add collapsible section for description
+        with st.expander("What are Temporal Attendance Trends?"):
         st.markdown("""
         **Definition:**
         Temporal Attendance Trends in schools refer to patterns in student attendance over different time periods (daily, weekly, monthly, or yearly). 
