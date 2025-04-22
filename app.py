@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import os
 from datetime import datetime
+import plotly.graph_objects as go
+
 
 # Import utility modules
 from utils.common import (
@@ -210,329 +212,335 @@ def render_sidebar():
     return app_mode
 
 # Individual Student Prediction
+
+import streamlit as st
+import plotly.graph_objects as go
+import pandas as pd
+
+def plot_risk_gauge(risk_value):
+    """Create a properly sized risk gauge visualization"""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=risk_value*100,
+        domain={'x': [0, 1], 'y': [0, 1]},
+        title={'text': "Absenteeism Risk Score", 'font': {'size': 14}},
+        gauge={
+            'axis': {'range': [None, 100], 'tickwidth': 1},
+            'steps': [
+                {'range': [0, 30], 'color': "lightgreen"},
+                {'range': [30, 70], 'color': "yellow"},
+                {'range': [70, 100], 'color': "red"}],
+            'threshold': {
+                'line': {'color': "black", 'width': 4},
+                'thickness': 0.75,
+                'value': risk_value*100}
+        }
+    ))
+    fig.update_layout(
+        height=300,  # Fixed height
+        width=400,   # Fixed width
+        margin=dict(t=50, b=10, l=50, r=50)
+    )
+    return fig
+
+def get_risk_explanation(risk_value, student_data):
+    """Generate clear explanation of risk factors"""
+    explanations = []
+    
+    if risk_value >= 0.7:
+        explanations.append("🚨 **Critical Risk Level** (70%+ probability of chronic absenteeism)")
+    elif risk_value >= 0.4:
+        explanations.append("⚠️ **Elevated Risk Level** (40-69% probability)")
+    else:
+        explanations.append("✅ **Low Risk Level** (Good attendance patterns)")
+    
+    present_days = student_data.get('Present_Days', 0)
+    absent_days = student_data.get('Absent_Days', 1)
+    attendance_pct = (present_days / (present_days + absent_days)) * 100
+    
+    if attendance_pct < 85:
+        explanations.append(f"• Low attendance rate ({attendance_pct:.1f}%)")
+    
+    academic_performance = student_data.get('Academic_Performance', 100)
+    if academic_performance < 65:
+        explanations.append(f"• Below-average academics ({academic_performance}%)")
+    
+    if student_data.get('Meal_Code', '') in ['Free', 'Reduced']:
+        explanations.append("• Eligible for meal assistance (potential socioeconomic factors)")
+    
+    return "\n".join(explanations)
+
+def get_recommendation_with_reasons(risk_value, student_data):
+    """Generate interventions with explanations based on risk factors"""
+    interventions = []
+    
+    if risk_value >= 0.7:
+        interventions.append((
+            "🚨 Immediate 1-on-1 meeting with school counselor",
+            "Student is at very high risk of chronic absenteeism"
+        ))
+        interventions.append((
+            "📞 Parent/guardian conference within 48 hours",
+            "Early family engagement is critical"
+        ))
+        
+        if student_data.get('Absent_Days', 0) > 15:
+            interventions.append((
+                "🩺 Schedule health checkup",
+                f"High absence days ({student_data.get('Absent_Days')})"
+            ))
+            
+        if student_data.get('Academic_Performance', 70) < 60:
+            interventions.append((
+                "📚 Assign academic support tutor",
+                f"Low performance ({student_data.get('Academic_Performance')}%)"
+            ))
+
+    elif risk_value >= 0.3:
+        interventions.append((
+            "📅 Weekly check-ins with homeroom teacher",
+            "Regular monitoring prevents escalation"
+        ))
+        interventions.append((
+            "✉️ Send personalized attendance report",
+            "Family awareness improves outcomes"
+        ))
+        
+        if student_data.get('Meal_Code', '') in ['Free', 'Reduced']:
+            interventions.append((
+                "🍎 Connect with nutrition programs",
+                "Address potential food insecurity"
+            ))
+
+    else:
+        interventions.append((
+            "👍 Positive reinforcement",
+            "Maintaining good patterns prevents issues"
+        ))
+        
+        if student_data.get('Present_Days', 0) < 160:
+            interventions.append((
+                "🎯 Set attendance improvement goal",
+                f"Current attendance: {student_data.get('Present_Days')} days"
+            ))
+
+    return interventions
+
+def on_calculate_risk():
+    """Calculate risk score based on form inputs"""
+    try:
+        selected_id = st.session_state.get("student_select")
+        if not selected_id:
+            st.error("No student selected")
+            return
+        
+        inputs = {
+            'Present_Days': st.session_state.get(f"present_{selected_id}", 150),
+            'Absent_Days': st.session_state.get(f"absent_{selected_id}", 10),
+            'Academic_Performance': st.session_state.get(f"academic_{selected_id}", 70),
+            'Grade': st.session_state.get(f"grade_{selected_id}", 9),
+            'Meal_Code': st.session_state.get(f"meal_{selected_id}", 'Free')
+        }
+        
+        attendance_rate = inputs['Present_Days'] / (inputs['Present_Days'] + inputs['Absent_Days'])
+        academic_factor = 1 - (inputs['Academic_Performance'] / 100)
+        risk_score = (0.6 * (1 - attendance_rate)) + (0.4 * academic_factor)
+        
+        st.session_state.current_prediction = risk_score
+        st.session_state.current_student_data = inputs
+        
+    except Exception as e:
+        st.error(f"Calculation error: {str(e)}")
+        st.session_state.current_prediction = None
+
 def render_individual_prediction():
-    """Render the Individual Student Prediction section"""
-    # Individual prediction card
+    """Main prediction interface"""
+    if 'current_prediction' not in st.session_state:
+        st.session_state.current_prediction = None
+    
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='card-title'>👨‍🎓 Individual Student Prediction</div>", unsafe_allow_html=True)
+    st.markdown("<div class='card-title'>👨‍🎓 Student Risk Analysis</div>", unsafe_allow_html=True)
     
-    # Add an expandable guide for this section
-    with st.expander("About Individual Prediction"):
-        st.markdown("""
-        This section allows you to predict chronic absenteeism risk for a single student.
-        
-        **How to use:**
-        1. Enter the student information in the form
-        2. Click 'Calculate CA Risk' to generate a prediction
-        3. View the risk level and recommendations
-        4. Try 'What-If' scenarios to see how changes might affect the risk level
-        
-        **Note:** If you enter an existing Student ID that matches historical records, the system will retrieve the student's history for reference.
-        """)
+    if 'current_year_data' not in st.session_state:
+        st.error("Please upload current-year data first")
+        return
     
-    # Create a two-column layout for input and result
-    col1, col2 = st.columns([2, 1])
+    required_columns = ['Student_ID', 'School', 'Grade', 'Present_Days', 
+                       'Absent_Days', 'Academic_Performance', 'Gender', 'Meal_Code']
     
-    with col1:  # Input column
-        st.markdown("<div class='card-subtitle'>📝 Student Details</div>", unsafe_allow_html=True)
+    missing_cols = [col for col in required_columns 
+                   if col not in st.session_state.current_year_data.columns]
+    
+    if missing_cols:
+        st.error(f"Missing columns: {', '.join(missing_cols)}")
+        return
+    
+    try:
+        current_students = st.session_state.current_year_data['Student_ID'].dropna().unique().tolist()
+        if not current_students:
+            st.error("No valid student IDs found")
+            return
+    except Exception as e:
+        st.error(f"Data error: {str(e)}")
+        return
+    
+    selected_id = st.selectbox(
+        "Select Student",
+        options=current_students,
+        index=0,
+        key="student_select"
+    )
+    
+    try:
+        student_data = st.session_state.current_year_data[
+            st.session_state.current_year_data['Student_ID'] == selected_id
+        ].iloc[0]
+    except IndexError:
+        st.error("Student not found")
+        return
+    
+    current_student = {
+        'School': str(student_data.get('School', 'North High')),
+        'Grade': int(student_data.get('Grade', 9)),
+        'Present_Days': int(student_data.get('Present_Days', 150)),
+        'Absent_Days': int(student_data.get('Absent_Days', 10)),
+        'Academic_Performance': int(student_data.get('Academic_Performance', 70)),
+        'Gender': str(student_data.get('Gender', 'Male')),
+        'Meal_Code': str(student_data.get('Meal_Code', 'Free'))
+    }
+    
+    with st.form(key="student_form"):
+        col1, col2 = st.columns(2)
         
-        # Option to select existing student or create new one
-        student_sel_options = ["NEW STUDENT"]
-        
-        # Add existing student IDs if available
-        if 'historical_data' in st.session_state and not st.session_state.historical_data.empty and 'Student_ID' in st.session_state.historical_data.columns:
-            existing_students = st.session_state.historical_data['Student_ID'].unique().tolist()
-            student_sel_options.extend(existing_students)
-        
-        # Safety check - make sure there are valid options (prevents exception)
-        if not student_sel_options:
-            st.warning("No student data available. Add new students or upload historical data.")
-            student_sel_options = ["NEW STUDENT"]
-            
-        # Student ID selection outside the form to track changes
-        try:
-            student_select = st.selectbox(
-                "Select Student",
-                options=student_sel_options,
-                index=0,
-                key="student_select",
-                help="Select an existing student or 'NEW STUDENT' to enter a new one"
-            )
-        except ValueError as e:
-            # Handle case where stored value isn't in the options (e.g. PS-102)
-            st.error(f"Student ID selection error: {str(e)}")
-            # Reset the selection to avoid the error
-            if 'student_select' in st.session_state:
-                del st.session_state.student_select
-            # Try again with default selection
-            student_select = st.selectbox(
-                "Select Student",
-                options=student_sel_options,
-                index=0,
-                key="student_select_retry",
-                help="Select an existing student or 'NEW STUDENT' to enter a new one"
-            )
-        
-        # If new student selected, show a text input
-        if student_select == "NEW STUDENT":
-            # Clear any previous student data when switching to NEW STUDENT
-            if 'student_id_input' in st.session_state and st.session_state.student_id_input != "":
-                # Only if we're changing from an existing student to NEW STUDENT
-                if st.session_state.student_id_input != "NEW STUDENT":
-                    # Reset form fields to defaults
-                    if 'school_input' in st.session_state:
-                        st.session_state.school_input = "North High"
-                    if 'grade_input' in st.session_state:
-                        st.session_state.grade_input = 9
-                    if 'gender_input' in st.session_state:
-                        st.session_state.gender_input = "Male"
-                    if 'meal_code_input' in st.session_state:
-                        st.session_state.meal_code_input = "Free"
-                    if 'present_days_input' in st.session_state:
-                        st.session_state.present_days_input = 150
-                    if 'absent_days_input' in st.session_state:
-                        st.session_state.absent_days_input = 10
-                    if 'academic_perf_input' in st.session_state:
-                        st.session_state.academic_perf_input = 70
-                    
-                    # Reset the current prediction
-                    if 'current_prediction' in st.session_state:
-                        st.session_state.current_prediction = None
-                    if 'calculation_complete' in st.session_state:
-                        st.session_state.calculation_complete = False
-            
-            # Use a new unique text input field for new students
-            new_student_id = st.text_input(
-                "Enter New Student ID",
-                key="new_student_id_input",
-                help="Enter a unique ID for the new student"
+        with col1:
+            school_options = ["North High", "South High", "East Middle", "West Elementary", "Central Academy"]
+            school_value = current_student['School']
+            school_index = school_options.index(school_value) if school_value in school_options else 0
+            st.selectbox(
+                "School",
+                options=school_options,
+                index=school_index,
+                key=f"school_{selected_id}"
             )
             
-            # Update the student_id_input when new_student_id_input changes
-            if new_student_id:
-                st.session_state.student_id_input = new_student_id
-            else:
-                # If no text entered, ensure student_id_input exists but is blank
-                if 'student_id_input' not in st.session_state:
-                    st.session_state.student_id_input = ""
-        else:
-            # Use the selected student ID and trigger reload of student data
-            if 'student_id_input' not in st.session_state or st.session_state.student_id_input != student_select:
-                st.session_state.student_id_input = student_select
-                # Force immediate update
-                st.session_state.student_id_changed = True
+            st.number_input(
+                "Grade",
+                min_value=1,
+                max_value=12,
+                value=current_student['Grade'],
+                key=f"grade_{selected_id}"
+            )
             
-        # Handle student ID changes using session state variables
-        if 'student_id_input' in st.session_state:
-            if 'prev_student_id' not in st.session_state:
-                st.session_state.prev_student_id = st.session_state.student_id_input
-            elif st.session_state.prev_student_id != st.session_state.student_id_input:
-                # Update previous ID and trigger change
-                prev_id = st.session_state.prev_student_id
-                current_id = st.session_state.student_id_input
-                st.session_state.prev_student_id = current_id
-                
-                # Don't call functions directly with on_change - use a flag in session state instead
-                if 'student_id_changed' not in st.session_state:
-                    st.session_state.student_id_changed = True
-        
-        # Process student ID change if needed
-        if 'student_id_changed' in st.session_state and st.session_state.student_id_changed:
-            on_student_id_change()
-            st.session_state.student_id_changed = False
-        
-        # Create a form for student data inputs
-        with st.form(key="ca_input_form", clear_on_submit=False):
-            # Create a layout for student details
-            details_col1, details_col2 = st.columns(2)
-            
-            with details_col1:
-                # School input - use session state value if available
-                school_options = ["North High", "South High", "East Middle", "West Elementary", "Central Academy"]
-                
-                # Set a default index if session state value isn't in the options
-                if 'school_input' in st.session_state and st.session_state.school_input in school_options:
-                    default_idx = school_options.index(st.session_state.school_input)
-                else:
-                    default_idx = 0
-                    # Reset session state to avoid errors
-                    if 'school_input' in st.session_state and st.session_state.school_input not in school_options:
-                        st.session_state.school_input = school_options[0]
-                
-                school = st.selectbox(
-                    "School",
-                    options=school_options,
-                    index=default_idx,
-                    key="school_input"
-                )
-                
-                # Grade input
-                grade = st.number_input(
-                    "Grade",
-                    min_value=1,
-                    max_value=12,
-                    value=9,
-                    key="grade_input"
-                )
-                
-                # Gender input
-                gender = st.selectbox(
-                    "Gender",
-                    options=["Male", "Female"],
-                    key="gender_input"
-                )
-                
-                # Meal code
-                meal_code = st.selectbox(
-                    "Meal Code",
-                    options=["Free", "Reduced", "Paid"],
-                    key="meal_code_input"
-                )
-            
-            with details_col2:
-                # Attendance details
-                present_days = st.number_input(
-                    "Present Days",
-                    min_value=0,
-                    max_value=200,
-                    value=150,
-                    key="present_days_input"
-                )
-                
-                absent_days = st.number_input(
-                    "Absent Days",
-                    min_value=0,
-                    max_value=200,
-                    value=10,
-                    key="absent_days_input"
-                )
-                
-                # Calculate attendance percentage
-                total_days = present_days + absent_days
-                attendance_pct = (present_days / total_days * 100) if total_days > 0 else 0
-                
-                st.metric("Attendance Percentage", f"{attendance_pct:.1f}%")
-                
-                # Academic performance
-                academic_perf = st.slider(
-                    "Academic Performance",
-                    min_value=0,
-                    max_value=100,
-                    value=70,
-                    key="academic_perf_input"
-                )
-            
-            # Submit button
-            submit_button = st.form_submit_button(label="Calculate CA Risk", on_click=on_calculate_risk)
-    
-    with col2:  # Results column
-        st.markdown("<div class='card-subtitle'>🔍 Risk Assessment</div>", unsafe_allow_html=True)
-        
-        # Display prediction results
-        if st.session_state.current_prediction is not None:
-            risk_value = st.session_state.current_prediction
-            
-            # Display the risk gauge
-            risk_fig = plot_risk_gauge(risk_value)
-            
-            if risk_fig:
-                st.plotly_chart(risk_fig, use_container_width=True, key="risk_gauge_chart")
-            
-            # Display recommendation
-            st.markdown("### Recommended Actions")
-            recommendations = get_recommendation(risk_value)
-            
-            st.markdown(f"<div class='recommendation'>", unsafe_allow_html=True)
-            for rec in recommendations:
-                st.markdown(f"- {rec}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.info("Enter student details and click 'Calculate CA Risk' to see prediction.")
-    
-    # What-if analysis section
-    if st.session_state.calculation_complete:
-        st.markdown("<div class='card-subtitle'>🔮 What-If Analysis</div>", unsafe_allow_html=True)
-        
-        # Place the details in an expander for cleaner interface
-        with st.expander("About What-If Analysis", expanded=True):
-            st.markdown("""
-            Adjust the parameters below to see how changes might affect this student's CA risk.
-            This can help plan interventions and understand key risk factors.
-            """)
-        
-        whatif_col1, whatif_col2, whatif_col3 = st.columns(3)
-        
-        with whatif_col1:
-            whatif_present = st.number_input(
-                "What-If Present Days",
+            present_days = st.number_input(
+                "Present Days",
                 min_value=0,
                 max_value=200,
-                value=int(st.session_state.present_days_input),
-                key="what_if_present_days"
+                value=current_student['Present_Days'],
+                key=f"present_{selected_id}"
             )
-        
-        with whatif_col2:
-            whatif_absent = st.number_input(
-                "What-If Absent Days",
+            
+            absent_days = st.number_input(
+                "Absent Days",
                 min_value=0,
                 max_value=200,
-                value=int(st.session_state.absent_days_input),
-                key="what_if_absent_days"
+                value=current_student['Absent_Days'],
+                key=f"absent_{selected_id}"
+            )
+            
+            total_days = present_days + absent_days
+            attendance_pct = (present_days/total_days*100 if total_days>0 else 0)
+            st.metric(
+                "Attendance Rate", 
+                f"{attendance_pct:.1f}%"
             )
         
-        with whatif_col3:
-            whatif_academic = st.number_input(
-                "What-If Academic Performance",
+        with col2:
+            academic_performance = st.slider(
+                "Academic Performance %",
                 min_value=0,
                 max_value=100,
-                value=int(st.session_state.academic_perf_input),
-                key="what_if_academic_perf"
+                value=current_student['Academic_Performance'],
+                key=f"academic_{selected_id}"
+            )
+            
+            gender_options = ["Male", "Female", "Other"]
+            gender_value = current_student['Gender']
+            gender_index = gender_options.index(gender_value) if gender_value in gender_options else 0
+            st.selectbox(
+                "Gender",
+                options=gender_options,
+                index=gender_index,
+                key=f"gender_{selected_id}"
+            )
+            
+            meal_options = ["Free", "Reduced", "Paid"]
+            meal_value = current_student['Meal_Code']
+            meal_index = meal_options.index(meal_value) if meal_value in meal_options else 0
+            st.selectbox(
+                "Meal Status",
+                options=meal_options,
+                index=meal_index,
+                key=f"meal_{selected_id}"
             )
         
-        # Calculate and show what-if prediction
-        whatif_button = st.button("Calculate What-If Scenario")
+        if st.form_submit_button("Analyze Risk"):
+            # Calculate attendance percentage
+            attendance_pct = (present_days/(present_days + absent_days)) * 100 if (present_days + absent_days) > 0 else 0
+            
+            # Automatically set to high risk if attendance <= 90%
+            if attendance_pct <= 90:
+                st.session_state.current_prediction = 0.8  # High risk value (0.8 is 80% probability)
+                st.warning("Automatically flagged as high risk due to low attendance (≤90%)")
+            else:
+                # Normal risk calculation
+                attendance_rate = present_days / (present_days + absent_days)
+                academic_factor = 1 - (academic_performance / 100)
+                risk_score = (0.6 * (1 - attendance_rate)) + (0.4 * academic_factor)
+                st.session_state.current_prediction = risk_score
+            
+            st.session_state.current_student_data = {
+                'Present_Days': present_days,
+                'Absent_Days': absent_days,
+                'Academic_Performance': academic_performance,
+                'Grade': current_student['Grade'],
+                'Meal_Code': meal_options[meal_index],
+                'Attendance_Percentage': attendance_pct
+            }
+            st.rerun()
+    
+    if st.session_state.get('current_prediction') is not None:
+        risk_value = st.session_state.current_prediction
         
-        # Handle what-if calculation when button is clicked
-        if whatif_button:
-            on_calculate_what_if()
+        # Create columns for better layout
+        col1, col2 = st.columns([1, 2])
         
-        # Display what-if results
-        if 'what_if_prediction' in st.session_state and st.session_state.what_if_prediction is not None:
-            whatif_col1, whatif_col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(
+                plot_risk_gauge(risk_value),
+                use_container_width=True,
+                config={'displayModeBar': False}
+            )
+        
+        with col2:
+            st.markdown("### Risk Analysis")
+            student_data = st.session_state.get('current_student_data', current_student)
             
-            with whatif_col1:
-                st.markdown("#### Original Prediction")
-                original_fig = plot_risk_gauge(st.session_state.original_prediction, key="original_gauge")
-                if original_fig:
-                    st.plotly_chart(original_fig, use_container_width=True, key="orig_fig_chart")
+            # Add attendance warning if applicable
+            if student_data.get('Attendance_Percentage', 100) <= 90:
+                st.warning("⚠️ High risk due to attendance ≤90%")
             
-            with whatif_col2:
-                st.markdown("#### What-If Prediction")
-                whatif_fig = plot_risk_gauge(st.session_state.what_if_prediction, key="whatif_gauge")
-                if whatif_fig:
-                    st.plotly_chart(whatif_fig, use_container_width=True, key="whatif_fig_chart")
+            st.markdown(get_risk_explanation(risk_value, student_data))
             
-            # Show difference
-            risk_diff = st.session_state.what_if_prediction - st.session_state.original_prediction
-            diff_text = "increased" if risk_diff > 0 else "decreased"
-            
-            st.markdown(f"""
-            <div class='info-box'>
-            The what-if scenario has <b>{diff_text}</b> the risk by <b>{abs(risk_diff)*100:.1f}%</b>.
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Show what-if recommendations
-            st.markdown("#### What-If Recommendations")
-            whatif_recommendations = get_recommendation(st.session_state.what_if_prediction, what_if=True)
-            
-            st.markdown(f"<div class='recommendation'>", unsafe_allow_html=True)
-            for rec in whatif_recommendations:
-                st.markdown(f"- {rec}")
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("### Recommended Actions")
+            for intervention, reason in get_recommendation_with_reasons(risk_value, student_data):
+                st.markdown(f"""
+                <div style="padding:10px; margin:8px 0; border-left:4px solid #4CAF50; background:#f8f9fa;">
+                    <div style="font-weight:bold; font-size:14px;">{intervention}</div>
+                    <div style="color:#555; font-size:13px;">{reason}</div>
+                </div>
+                """, unsafe_allow_html=True)
     
     st.markdown("</div>", unsafe_allow_html=True)
-
 # Main application
 def main():
     """Main application entry point"""
